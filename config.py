@@ -6,3 +6,5 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "secret_key")
     SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"charset": "utf8mb4"}}
     JWT_SECRET_KEY = "jwt-secret-key"
+
+    LAMBDA_IMG_ENDPOINT = os.getenv("LAMBDA_IMG_ENDPOINT")
