@@ -1,0 +1,35 @@
+name: 🚀 Auto Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main  # Mỗi khi push vào nhánh main, workflow sẽ chạy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 SSH to EC2 and deploy
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/doanchuyennganh2-be
+            echo "📦 Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🧩 Activating virtual environment..."
+            source venv/bin/activate
+
+            echo "⬆️ Installing dependencies..."
+            pip install -r requirements.txt
+
+            echo "🔁 Restarting Gunicorn..."
+            pkill gunicorn || true
+            nohup gunicorn --bind 0.0.0.0:5000 run:app > gunicorn.log 2>&1 &
+            
+            echo "✅ Deploy finished!"
