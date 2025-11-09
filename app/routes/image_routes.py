@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from config import Config
 import boto3
 from botocore.exceptions import ClientError
+from boto3.dynamodb.types import TypeDeserializer
 
 image_bp = Blueprint("image", __name__)
 
@@ -102,38 +103,45 @@ RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
 @jwt_required(optional=True)
 def get_result(job_id):
-    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB"""
+    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (đã convert về JSON chuẩn)"""
     try:
-        # Dùng resource DynamoDB an toàn
         table = dynamodb.Table(RESULTS_TABLE)
-
-        # Gọi DynamoDB get_item
         response = table.get_item(Key={"job_id": job_id})
-
-        # Nếu không có dữ liệu
         item = response.get("Item")
+
         if not item:
             return jsonify({
                 "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
             }), 404
 
-        # ✅ Chuyển các kiểu dữ liệu đặc biệt (Decimal, set, vv.) về JSON-safe
-        def make_json_safe(obj):
-            if isinstance(obj, list):
-                return [make_json_safe(i) for i in obj]
-            elif isinstance(obj, dict):
-                return {k: make_json_safe(v) for k, v in obj.items()}
-            elif isinstance(obj, (int, float, str, type(None), bool)):
-                return obj
-            else:
-                # tránh lỗi recursion hoặc object không serialize được
-                return str(obj)
+        # ✅ Chuyển từ AttributeValue sang dict thuần
+        deserializer = TypeDeserializer()
 
-        safe_item = make_json_safe(item)
+        def deserialize(data):
+            """Chuyển mọi field từ DynamoDB AttributeValue sang JSON chuẩn"""
+            if isinstance(data, dict):
+                if set(data.keys()) == {"S"}:
+                    return data["S"]
+                if set(data.keys()) == {"N"}:
+                    return float(data["N"]) if "." in data["N"] else int(data["N"])
+                if set(data.keys()) == {"BOOL"}:
+                    return data["BOOL"]
+                if set(data.keys()) == {"L"}:
+                    return [deserialize(i) for i in data["L"]]
+                if set(data.keys()) == {"M"}:
+                    return {k: deserialize(v) for k, v in data["M"].items()}
+                # fallback nếu dict không theo format DynamoDB
+                return {k: deserialize(v) for k, v in data.items()}
+            elif isinstance(data, list):
+                return [deserialize(i) for i in data]
+            else:
+                return data
+
+        clean_item = deserialize(item)
 
         return jsonify({
             "message": "Truy vấn thành công",
-            "data": safe_item
+            "data": clean_item
         }), 200
 
     except ClientError as e:
