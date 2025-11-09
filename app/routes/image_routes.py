@@ -106,11 +106,16 @@ RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
 def get_result(job_id):
     """Gọi Lambda API để lấy kết quả xử lý ảnh từ DynamoDB"""
     try:
-        # 🔹 Gọi đến Lambda qua API Gateway
-        url = f"{LAMBDA_API_BASE}/dynamodb/{RESULTS_TABLE}/{job_id}"
-        current_app.logger.info(f"Đang gọi Lambda API: {url}")
+        # ✅ Gọi Lambda bằng query string (đúng format Cách 1)
+        url = f"{LAMBDA_API_BASE}/dynamodb"
+        params = {
+            "table": RESULTS_TABLE,
+            "job_id": job_id
+        }
 
-        resp = requests.get(url, timeout=10)
+        current_app.logger.info(f"Đang gọi Lambda API: {url} với params: {params}")
+
+        resp = requests.get(url, params=params, timeout=15)
 
         # 🔹 Nếu Lambda không trả về 200
         if resp.status_code != 200:
@@ -119,6 +124,7 @@ def get_result(job_id):
                 "error": resp.text
             }), resp.status_code
 
+        # 🔹 Parse JSON phản hồi
         data = resp.json()
 
         return jsonify({
@@ -127,7 +133,6 @@ def get_result(job_id):
         }), 200
 
     except requests.exceptions.RequestException as e:
-        # 🔹 Lỗi kết nối (timeout, DNS, v.v.)
         current_app.logger.error(f"Lỗi kết nối Lambda API: {str(e)}")
         return jsonify({
             "message": "Không thể kết nối Lambda API",
@@ -135,7 +140,6 @@ def get_result(job_id):
         }), 502
 
     except Exception as e:
-        # 🔹 Lỗi không xác định
         current_app.logger.error(f"Lỗi không xác định: {str(e)}")
         return jsonify({
             "message": "Lỗi không xác định",
