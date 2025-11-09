@@ -104,27 +104,21 @@ RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
 @jwt_required(optional=True)
 def get_result(job_id):
-    """Gọi Lambda API để lấy kết quả xử lý ảnh từ DynamoDB"""
+    """Gọi Lambda API (path parameters) để lấy kết quả xử lý ảnh từ DynamoDB"""
     try:
-        # ✅ Gọi Lambda bằng query string (đúng format Cách 1)
-        url = f"{LAMBDA_API_BASE}/dynamodb"
-        params = {
-            "table": RESULTS_TABLE,
-            "job_id": job_id
-        }
+        # ✅ Gọi đúng format path-based route của API Gateway
+        url = f"{LAMBDA_API_BASE}/dynamodb/{RESULTS_TABLE}/{job_id}"
+        current_app.logger.info(f"Đang gọi Lambda API: {url}")
 
-        current_app.logger.info(f"Đang gọi Lambda API: {url} với params: {params}")
+        resp = requests.get(url, timeout=15)
 
-        resp = requests.get(url, params=params, timeout=15)
-
-        # 🔹 Nếu Lambda không trả về 200
         if resp.status_code != 200:
+            current_app.logger.error(f"Lỗi Lambda: {resp.status_code} - {resp.text}")
             return jsonify({
                 "message": f"Lỗi khi gọi Lambda (HTTP {resp.status_code})",
                 "error": resp.text
             }), resp.status_code
 
-        # 🔹 Parse JSON phản hồi
         data = resp.json()
 
         return jsonify({
