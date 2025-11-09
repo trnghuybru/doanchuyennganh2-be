@@ -97,43 +97,46 @@ def upload_image():
             "error": str(e)
         }), 500
 
-dynamodb = boto3.client("dynamodb", region_name="ap-northeast-1")
-RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
+LAMBDA_API_BASE = "https://006w081cdi.execute-api.ap-northeast-1.amazonaws.com" 
 
+RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
 
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
 @jwt_required(optional=True)
 def get_result(job_id):
-    """Lấy kết quả xử lý ảnh từ DynamoDB (chuyển sang JSON chuẩn)"""
+    """Gọi Lambda API để lấy kết quả xử lý ảnh từ DynamoDB"""
     try:
-        # 🔹 Lấy dữ liệu theo job_id
-        resp = dynamodb.get_item(
-            TableName=RESULTS_TABLE,
-            Key={"job_id": {"S": job_id}}
-        )
+        # 🔹 Gọi đến Lambda qua API Gateway
+        url = f"{LAMBDA_API_BASE}/dynamodb/{RESULTS_TABLE}/{job_id}"
+        current_app.logger.info(f"Đang gọi Lambda API: {url}")
 
-        if "Item" not in resp:
+        resp = requests.get(url, timeout=10)
+
+        # 🔹 Nếu Lambda không trả về 200
+        if resp.status_code != 200:
             return jsonify({
-                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
-            }), 404
+                "message": f"Lỗi khi gọi Lambda (HTTP {resp.status_code})",
+                "error": resp.text
+            }), resp.status_code
 
-        # 🔹 Convert từ AttributeValue sang JSON thuần
-        deserializer = TypeDeserializer()
-
-        def convert_attr_map(attr_map):
-            """Convert từng trường trong bản ghi DynamoDB"""
-            return {k: deserializer.deserialize(v) for k, v in attr_map.items()}
-
-        clean_item = convert_attr_map(resp["Item"])
+        data = resp.json()
 
         return jsonify({
             "message": "Truy vấn thành công",
-            "data": clean_item
+            "data": data.get("data")
         }), 200
 
+    except requests.exceptions.RequestException as e:
+        # 🔹 Lỗi kết nối (timeout, DNS, v.v.)
+        current_app.logger.error(f"Lỗi kết nối Lambda API: {str(e)}")
+        return jsonify({
+            "message": "Không thể kết nối Lambda API",
+            "error": str(e)
+        }), 502
+
     except Exception as e:
-        # 🔹 Ghi log chi tiết để debug nếu lỗi
-        current_app.logger.error(f"Lỗi khi truy vấn DynamoDB: {str(e)}")
+        # 🔹 Lỗi không xác định
+        current_app.logger.error(f"Lỗi không xác định: {str(e)}")
         return jsonify({
             "message": "Lỗi không xác định",
             "error": str(e)

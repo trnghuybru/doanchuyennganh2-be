@@ -19,3 +19,4 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-secret-key")
 
     LAMBDA_IMG_ENDPOINT = os.getenv("LAMBDA_IMG_ENDPOINT")
+    
