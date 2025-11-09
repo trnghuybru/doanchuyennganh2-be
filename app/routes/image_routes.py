@@ -97,16 +97,17 @@ def upload_image():
             "error": str(e)
         }), 500
 
-dynamodb = boto3.client('dynamodb', region_name='ap-northeast-1')
-RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
+dynamodb = boto3.client("dynamodb", region_name="ap-northeast-1")
+RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
+
 
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
 @jwt_required(optional=True)
 def get_result(job_id):
-    """Lấy kết quả xử lý ảnh từ DynamoDB bằng boto3.client"""
+    """Lấy kết quả xử lý ảnh từ DynamoDB (chuyển sang JSON chuẩn)"""
     try:
-        client = boto3.client("dynamodb", region_name="ap-northeast-1")
-        resp = client.get_item(
+        # 🔹 Lấy dữ liệu theo job_id
+        resp = dynamodb.get_item(
             TableName=RESULTS_TABLE,
             Key={"job_id": {"S": job_id}}
         )
@@ -116,13 +117,14 @@ def get_result(job_id):
                 "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
             }), 404
 
-        # ✅ Dùng TypeDeserializer để chuyển đổi
+        # 🔹 Convert từ AttributeValue sang JSON thuần
         deserializer = TypeDeserializer()
 
-        def convert(item):
-            return {k: deserializer.deserialize(v) for k, v in item.items()}
+        def convert_attr_map(attr_map):
+            """Convert từng trường trong bản ghi DynamoDB"""
+            return {k: deserializer.deserialize(v) for k, v in attr_map.items()}
 
-        clean_item = convert(resp["Item"])
+        clean_item = convert_attr_map(resp["Item"])
 
         return jsonify({
             "message": "Truy vấn thành công",
@@ -130,99 +132,8 @@ def get_result(job_id):
         }), 200
 
     except Exception as e:
-        current_app.logger.error(f"Lỗi DynamoDB: {str(e)}")
-        return jsonify({
-            "message": "Lỗi không xác định",
-            "error": str(e)
-        }), 500
-    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (convert bằng TypeDeserializer)"""
-    try:
-        table = dynamodb.Table(RESULTS_TABLE)
-        response = table.get_item(Key={"job_id": job_id})
-        raw_item = response.get("Item")
-
-        if not raw_item:
-            return jsonify({
-                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
-            }), 404
-
-        # ✅ Sử dụng AWS TypeDeserializer để convert tất cả field
-        deserializer = TypeDeserializer()
-
-        def dynamo_to_python(value):
-            """Convert AttributeValue -> Python object an toàn"""
-            # Dữ liệu boto3 trả về có dạng {"S": "..."} | {"M": {...}} | ...
-            if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in ["S", "N", "BOOL", "NULL", "M", "L"]:
-                return deserializer.deserialize(value)
-            elif isinstance(value, dict):
-                return {k: dynamo_to_python(v) for k, v in value.items()}
-            elif isinstance(value, list):
-                return [dynamo_to_python(v) for v in value]
-            else:
-                return value
-
-        clean_item = dynamo_to_python(raw_item)
-
-        return jsonify({
-            "message": "Truy vấn thành công",
-            "data": clean_item
-        }), 200
-
-    except Exception as e:
-        current_app.logger.error(f"Unexpected error: {str(e)}")
-        return jsonify({
-            "message": "Lỗi không xác định",
-            "error": str(e)
-        }), 500
-    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (đã convert về JSON chuẩn)"""
-    try:
-        table = dynamodb.Table(RESULTS_TABLE)
-        response = table.get_item(Key={"job_id": job_id})
-        item = response.get("Item")
-
-        if not item:
-            return jsonify({
-                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
-            }), 404
-
-        # ✅ Chuyển từ AttributeValue sang dict thuần
-        deserializer = TypeDeserializer()
-
-        def deserialize(data):
-            """Chuyển mọi field từ DynamoDB AttributeValue sang JSON chuẩn"""
-            if isinstance(data, dict):
-                if set(data.keys()) == {"S"}:
-                    return data["S"]
-                if set(data.keys()) == {"N"}:
-                    return float(data["N"]) if "." in data["N"] else int(data["N"])
-                if set(data.keys()) == {"BOOL"}:
-                    return data["BOOL"]
-                if set(data.keys()) == {"L"}:
-                    return [deserialize(i) for i in data["L"]]
-                if set(data.keys()) == {"M"}:
-                    return {k: deserialize(v) for k, v in data["M"].items()}
-                # fallback nếu dict không theo format DynamoDB
-                return {k: deserialize(v) for k, v in data.items()}
-            elif isinstance(data, list):
-                return [deserialize(i) for i in data]
-            else:
-                return data
-
-        clean_item = deserialize(item)
-
-        return jsonify({
-            "message": "Truy vấn thành công",
-            "data": clean_item
-        }), 200
-
-    except ClientError as e:
-        current_app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
-        return jsonify({
-            "message": "Lỗi truy vấn DynamoDB",
-            "error": e.response['Error']['Message']
-        }), 500
-    except Exception as e:
-        current_app.logger.error(f"Unexpected error: {str(e)}")
+        # 🔹 Ghi log chi tiết để debug nếu lỗi
+        current_app.logger.error(f"Lỗi khi truy vấn DynamoDB: {str(e)}")
         return jsonify({
             "message": "Lỗi không xác định",
             "error": str(e)
