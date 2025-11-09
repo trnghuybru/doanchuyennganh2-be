@@ -6,6 +6,8 @@ from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from config import Config
+import boto3
+from botocore.exceptions import ClientError
 
 image_bp = Blueprint("image", __name__)
 
@@ -91,5 +93,41 @@ def upload_image():
         current_app.logger.error(f"❌ Unexpected error: {e}")
         return jsonify({
             "message": "Error invoking Lambda A",
+            "error": str(e)
+        }), 500
+
+dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-1')
+RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
+
+@image_bp.route("/result/<string:job_id>", methods=["GET"])
+@jwt_required(optional=True)
+def get_result(job_id):
+    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB"""
+    try:
+        table = dynamodb.Table(RESULTS_TABLE)
+        response = table.get_item(Key={"job_id": job_id})
+
+        if "Item" not in response:
+            return jsonify({
+                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
+            }), 404
+
+        item = response["Item"]
+
+        return jsonify({
+            "message": "Truy vấn thành công",
+            "data": item
+        }), 200
+
+    except ClientError as e:
+        current_app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
+        return jsonify({
+            "message": "Lỗi truy vấn DynamoDB",
+            "error": e.response['Error']['Message']
+        }), 500
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error: {str(e)}")
+        return jsonify({
+            "message": "Lỗi không xác định",
             "error": str(e)
         }), 500
