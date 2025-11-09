@@ -101,8 +101,47 @@ dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-1')
 RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
 
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
-@jwt_required(optional=True)
+@jwt_required()
 def get_result(job_id):
+    """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (convert bằng TypeDeserializer)"""
+    try:
+        table = dynamodb.Table(RESULTS_TABLE)
+        response = table.get_item(Key={"job_id": job_id})
+        raw_item = response.get("Item")
+
+        if not raw_item:
+            return jsonify({
+                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
+            }), 404
+
+        # ✅ Sử dụng AWS TypeDeserializer để convert tất cả field
+        deserializer = TypeDeserializer()
+
+        def dynamo_to_python(value):
+            """Convert AttributeValue -> Python object an toàn"""
+            # Dữ liệu boto3 trả về có dạng {"S": "..."} | {"M": {...}} | ...
+            if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in ["S", "N", "BOOL", "NULL", "M", "L"]:
+                return deserializer.deserialize(value)
+            elif isinstance(value, dict):
+                return {k: dynamo_to_python(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [dynamo_to_python(v) for v in value]
+            else:
+                return value
+
+        clean_item = dynamo_to_python(raw_item)
+
+        return jsonify({
+            "message": "Truy vấn thành công",
+            "data": clean_item
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error: {str(e)}")
+        return jsonify({
+            "message": "Lỗi không xác định",
+            "error": str(e)
+        }), 500
     """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (đã convert về JSON chuẩn)"""
     try:
         table = dynamodb.Table(RESULTS_TABLE)
