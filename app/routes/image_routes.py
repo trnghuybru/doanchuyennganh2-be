@@ -104,19 +104,36 @@ RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
 def get_result(job_id):
     """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB"""
     try:
+        # Dùng resource DynamoDB an toàn
         table = dynamodb.Table(RESULTS_TABLE)
+
+        # Gọi DynamoDB get_item
         response = table.get_item(Key={"job_id": job_id})
 
-        if "Item" not in response:
+        # Nếu không có dữ liệu
+        item = response.get("Item")
+        if not item:
             return jsonify({
                 "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
             }), 404
 
-        item = response["Item"]
+        # ✅ Chuyển các kiểu dữ liệu đặc biệt (Decimal, set, vv.) về JSON-safe
+        def make_json_safe(obj):
+            if isinstance(obj, list):
+                return [make_json_safe(i) for i in obj]
+            elif isinstance(obj, dict):
+                return {k: make_json_safe(v) for k, v in obj.items()}
+            elif isinstance(obj, (int, float, str, type(None), bool)):
+                return obj
+            else:
+                # tránh lỗi recursion hoặc object không serialize được
+                return str(obj)
+
+        safe_item = make_json_safe(item)
 
         return jsonify({
             "message": "Truy vấn thành công",
-            "data": item
+            "data": safe_item
         }), 200
 
     except ClientError as e:
