@@ -97,12 +97,44 @@ def upload_image():
             "error": str(e)
         }), 500
 
-dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-1')
+dynamodb = boto3.client('dynamodb', region_name='ap-northeast-1')
 RESULTS_TABLE = dynamodb.Table('std-dacn-questions-table-truonggiahuy')
 
 @image_bp.route("/result/<string:job_id>", methods=["GET"])
-@jwt_required()
+@jwt_required(optional=True)
 def get_result(job_id):
+    """Lấy kết quả xử lý ảnh từ DynamoDB bằng boto3.client"""
+    try:
+        client = boto3.client("dynamodb", region_name="ap-northeast-1")
+        resp = client.get_item(
+            TableName=RESULTS_TABLE,
+            Key={"job_id": {"S": job_id}}
+        )
+
+        if "Item" not in resp:
+            return jsonify({
+                "message": f"Không tìm thấy kết quả cho job_id: {job_id}"
+            }), 404
+
+        # ✅ Dùng TypeDeserializer để chuyển đổi
+        deserializer = TypeDeserializer()
+
+        def convert(item):
+            return {k: deserializer.deserialize(v) for k, v in item.items()}
+
+        clean_item = convert(resp["Item"])
+
+        return jsonify({
+            "message": "Truy vấn thành công",
+            "data": clean_item
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Lỗi DynamoDB: {str(e)}")
+        return jsonify({
+            "message": "Lỗi không xác định",
+            "error": str(e)
+        }), 500
     """Lấy kết quả xử lý ảnh theo job_id từ DynamoDB (convert bằng TypeDeserializer)"""
     try:
         table = dynamodb.Table(RESULTS_TABLE)
