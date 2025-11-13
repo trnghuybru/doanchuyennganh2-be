@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 import uuid
 import os
 import boto3
+import json
 
 from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion
 
@@ -264,8 +265,13 @@ def edit_question(question_id: str):
 			# Parse choices if string (from multipart)
 			choices_list = data.get('choices')
 			if isinstance(choices_list, str):
-				import json
-				choices_list = json.loads(choices_list)
+				try:
+					choices_list = json.loads(choices_list)
+					if choices_list is None:
+						choices_list = []
+				except (ValueError, TypeError) as ex:
+					current_app.logger.warning(f"Failed to parse choices JSON: {ex}; raw={choices_list}")
+					return jsonify({'message': 'Invalid choices format'}), 400
 			elif not isinstance(choices_list, list):
 				choices_list = []
 			
@@ -286,8 +292,13 @@ def edit_question(question_id: str):
 			# Parse tags if string
 			tags_list = data.get('tags')
 			if isinstance(tags_list, str):
-				import json
-				tags_list = json.loads(tags_list)
+				try:
+					tags_list = json.loads(tags_list)
+					if tags_list is None:
+						tags_list = []
+				except (ValueError, TypeError):
+					# fallback: accept comma-separated string "a, b, c"
+					tags_list = [t.strip() for t in tags_list.split(',') if t.strip()]
 			elif not isinstance(tags_list, list):
 				tags_list = []
 			
@@ -304,7 +315,7 @@ def edit_question(question_id: str):
 		
 		# Handle media files (multipart upload to S3)
 		if 'media_files' in request.files:
-			bucket = os.getenv('S3_BUCKET')
+			bucket = os.getenv('S3_BUCKET', 'std-dacn-truonggiahuy-bucket-20251010')
 			if not bucket:
 				return jsonify({'message': 'S3_BUCKET not configured'}), 500
 			
