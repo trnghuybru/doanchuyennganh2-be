@@ -3,7 +3,7 @@ name: 🚀 Auto Deploy to EC2
 on:
   push:
     branches:
-      - main  # Mỗi khi push vào nhánh main, workflow sẽ chạy
+      - main # Mỗi khi push vào nhánh main, workflow sẽ chạy
 
 jobs:
   deploy:
@@ -31,5 +31,5 @@ jobs:
             echo "🔁 Restarting Gunicorn..."
             pkill gunicorn || true
             nohup gunicorn --bind 0.0.0.0:5000 run:app > gunicorn.log 2>&1 &
-            
+
             echo "✅ Deploy finished!"
