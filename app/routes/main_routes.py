@@ -84,6 +84,7 @@ def create_questions_batch():
 				source=item.get('source')
 			)
 			db.session.add(q)
+			db.session.flush()  # Ensure question is inserted before adding related records
 
 			# choices
 			choices = item.get('choices') or []
@@ -142,7 +143,7 @@ def create_questions_batch():
 
 			results.append({'question_id': qid})
 
-			db.session.commit()
+		db.session.commit()
 		return jsonify({'created': results}), 201
 
 	except Exception as e:
