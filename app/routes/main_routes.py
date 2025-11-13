@@ -38,6 +38,66 @@ def _gen_id(prefix: str = 'q_') -> str:
 	return prefix + str(uuid.uuid4())[:8]
 
 
+def _serialize_question(q: Question) -> dict:
+	"""Return a JSON-serializable dict for a Question and its relations."""
+	# basic fields
+	obj = {
+		'question_id': q.question_id,
+		'question_text': q.question_text,
+		'bloom_level': q.bloom_level,
+		'difficulty': q.difficulty,
+		'explanation': q.explanation,
+		'source': q.source,
+		'created_at': q.created_at.isoformat() if getattr(q, 'created_at', None) else None,
+		'updated_at': q.updated_at.isoformat() if getattr(q, 'updated_at', None) else None,
+	}
+
+	# choices
+	choice_rows = Choice.query.filter_by(question_id=q.question_id).order_by(Choice.choice_id).all()
+	obj['choices'] = [
+		{
+			'choice_id': c.choice_id,
+			'label': c.label,
+			'text': c.text,
+			'is_correct': bool(c.is_correct)
+		}
+		for c in choice_rows
+	]
+
+	# tags
+	tag_rows = (Tag.query
+				.join(QuestionTag, Tag.tag_id == QuestionTag.tag_id)
+				.filter(QuestionTag.question_id == q.question_id)
+				.all())
+	obj['tags'] = [t.name for t in tag_rows]
+
+	# media
+	media_rows = Media.query.filter_by(question_id=q.question_id).order_by(Media.media_id).all()
+	obj['media'] = [
+		{
+			'media_id': m.media_id,
+			'file_url': m.file_url,
+			'file_type': m.file_type,
+			'description': m.description
+		}
+		for m in media_rows
+	]
+
+	# exams linking
+	eq_rows = ExamQuestion.query.filter_by(question_id=q.question_id).all()
+	exams = []
+	for eq in eq_rows:
+		exam = Exam.query.filter_by(exam_id=eq.exam_id).first()
+		exams.append({
+			'exam_id': eq.exam_id,
+			'order_no': eq.order_no,
+			'exam_title': getattr(exam, 'title', None) if exam else None
+		})
+	obj['exams'] = exams
+
+	return obj
+
+
 @main.route('/questions/batch', methods=['POST'])
 def create_questions_batch():
 	"""Create a list of questions (with choices, tags, media, optional exam linking).
@@ -291,7 +351,11 @@ def edit_question(question_id: str):
 					db.session.add(ExamQuestion(exam_id=exam_id, question_id=question_id, order_no=order_no))
 		
 		db.session.commit()
-		return jsonify({'message': 'Question updated', 'question_id': question_id}), 200
+		# reload question to ensure we return fresh state
+		q = Question.query.filter_by(question_id=question_id).first()
+		if not q:
+			return jsonify({'message': 'Question updated but failed to load'}), 200
+		return jsonify({'message': 'Question updated', 'question': _serialize_question(q)}), 200
 	
 	except Exception as e:
 		db.session.rollback()
