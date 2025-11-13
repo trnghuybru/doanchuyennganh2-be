@@ -5,7 +5,7 @@ class Question(db.Model):
 
     question_id = db.Column(db.String(50), primary_key=True)
     question_text = db.Column(db.Text, nullable=False)
-    topic_id = db.Column(db.Integer, db.ForeignKey("topics.topic_id", ondelete="SET NULL"))
+    # topic removed: questions no longer reference topics
     bloom_level = db.Column(db.Enum("remember", "understand", "apply", "analyze", "evaluate", "create"))
     difficulty = db.Column(db.Enum("easy", "medium", "hard"))
     explanation = db.Column(db.Text)

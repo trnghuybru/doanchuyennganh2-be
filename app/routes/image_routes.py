@@ -106,7 +106,7 @@ RESULTS_TABLE = "std-dacn-questions-table-truonggiahuy"
 def get_result(job_id):
     """Gọi Lambda API (path parameters) để lấy kết quả xử lý ảnh từ DynamoDB"""
     try:
-        # ✅ Gọi đúng format path-based route của API Gateway
+       
         url = f"{LAMBDA_API_BASE}/dynamodb/{RESULTS_TABLE}/{job_id}"
         current_app.logger.info(f"Đang gọi Lambda API: {url}")
 

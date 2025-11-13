@@ -12,7 +12,7 @@ from faker import Faker
 from werkzeug.security import generate_password_hash
 from app import create_app
 from app.models import (
-    db, User, Topic, TopicRelation, Question,
+    db, User, Question,
     Choice, Tag, QuestionTag, Exam, ExamQuestion, Media
 )
 
@@ -57,28 +57,7 @@ def create_users(n=10):
     return users
 
 
-def create_topics(n=8):
-    """Tạo chủ đề câu hỏi."""
-    topics = [Topic(name=fake.word().capitalize()) for _ in range(n)]
-    db.session.add_all(topics)
-    db.session.commit()
-    print(f"✅ Đã tạo {len(topics)} topics.")
-    return Topic.query.all()
-
-
-def create_topic_relations(topics, n=6):
-    """Tạo mối quan hệ cha-con giữa các topic."""
-    relations = []
-    if len(topics) < 2:
-        return []
-    for _ in range(n):
-        parent = random.choice(topics)
-        tr = TopicRelation(parent_id=parent.topic_id, parent_name=parent.name)
-        relations.append(tr)
-    db.session.add_all(relations)
-    db.session.commit()
-    print(f"✅ Đã tạo {len(relations)} topic relations.")
-    return relations
+# Topics removed: project uses tags only now
 
 
 def create_tags(n=12):
@@ -96,16 +75,14 @@ def create_tags(n=12):
     return Tag.query.all()
 
 
-def create_questions(topics, tags, n=30):
-    """Tạo câu hỏi, lựa chọn và gán tag."""
+def create_questions(tags, n=30):
+    """Tạo câu hỏi, lựa chọn và gán tag (không có topic)."""
     questions = []
     for _ in range(n):
         qid = uid("q_")
-        topic = random.choice(topics) if topics else None
         q = Question(
             question_id=qid,
             question_text=fake.sentence(nb_words=12),
-            topic_id=topic.topic_id if topic else None,
             bloom_level=random.choice(["remember", "understand", "apply", "analyze", "evaluate", "create"]),
             difficulty=random.choice(["easy", "medium", "hard"]),
             explanation=fake.sentence(nb_words=10),
@@ -203,14 +180,11 @@ def run_all(reset=False):
 
         print("🚀 Đang tạo dữ liệu giả ...")
         users = create_users(8)
-        topics = create_topics(10)
-        create_topic_relations(topics, n=6)
         tags = create_tags(12)
-        questions = create_questions(topics, tags, n=40)
+        questions = create_questions(tags, n=40)
         exams = create_exams(users, questions, n=6)
         create_media(questions, n=12)
-        print(f"\n🎉 Hoàn tất seed data: Users={len(users)}, Topics={len(topics)}, "
-              f"Questions={len(questions)}, Exams={len(exams)}")
+        print(f"\n🎉 Hoàn tất seed data: Users={len(users)}, Questions={len(questions)}, Exams={len(exams)}")
 
 
 if __name__ == "__main__":
