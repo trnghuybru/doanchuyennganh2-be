@@ -8,31 +8,31 @@ from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, Exam
 
 main = Blueprint('main', __name__)
 
-_s3_client = None
+# _s3_client = None
 
-def get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client(
-            's3',
-            region_name=os.getenv('AWS_REGION', 'ap-northeast-1')
-        )
-    return _s3_client
+# def get_s3_client():
+#     global _s3_client
+#     if _s3_client is None:
+#         _s3_client = boto3.client(
+#             's3',
+#             region_name=os.getenv('AWS_REGION', 'ap-northeast-1')
+#         )
+#     return _s3_client
 
-def upload_to_s3(file_obj, bucket: str, key: str) -> str:
-    """Upload file to S3 and return the S3 URL."""
-    try:
-        s3 = get_s3_client()
-        s3.upload_fileobj(
-            file_obj,
-            bucket,
-            key,
-            ExtraArgs={'ContentType': file_obj.content_type}
-        )
-        return f"s3://{bucket}/{key}"
-    except Exception as e:
-        current_app.logger.error(f"S3 upload error: {str(e)}")
-        raise
+# def upload_to_s3(file_obj, bucket: str, key: str) -> str:
+#     """Upload file to S3 and return the S3 URL."""
+#     try:
+#         s3 = get_s3_client()
+#         s3.upload_fileobj(
+#             file_obj,
+#             bucket,
+#             key,
+#             ExtraArgs={'ContentType': file_obj.content_type}
+#         )
+#         return f"s3://{bucket}/{key}"
+#     except Exception as e:
+#         current_app.logger.error(f"S3 upload error: {str(e)}")
+#         raise
 
 
 def _gen_id(prefix: str = 'q_') -> str:
@@ -212,164 +212,164 @@ def create_questions_batch():
 		return jsonify({'message': 'Failed to create questions', 'error': str(e)}), 500
 
 
-@main.route('/questions/<question_id>', methods=['PUT'])
-def edit_question(question_id: str):
-	"""Edit an existing question (with choices, tags, media, exam linking).
+# @main.route('/questions/<question_id>', methods=['PUT'])
+# def edit_question(question_id: str):
+# 	"""Edit an existing question (with choices, tags, media, exam linking).
 	
-	Supports both JSON and multipart form-data:
-	  - JSON: question_text, bloom_level, difficulty, explanation, source,
-	          choices (array of {label, text, is_correct}),
-	          tags (array of tag names)
-	  - multipart: same fields + 'media_files' (multiple files)
+# 	Supports both JSON and multipart form-data:
+# 	  - JSON: question_text, bloom_level, difficulty, explanation, source,
+# 	          choices (array of {label, text, is_correct}),
+# 	          tags (array of tag names)
+# 	  - multipart: same fields + 'media_files' (multiple files)
 	
-	Media files will be uploaded to S3 if S3 credentials are configured.
+# 	Media files will be uploaded to S3 if S3 credentials are configured.
 	
-	Behavior:
-	  - Replaces choices/tags if provided (deletes old, creates new)
-	  - Appends media (unless explicitly replaced)
-	  - Updates exam linking if exam_id provided
-	"""
-	q = Question.query.filter_by(question_id=question_id).first()
-	if not q:
-		return jsonify({'message': 'Question not found'}), 404
+# 	Behavior:
+# 	  - Replaces choices/tags if provided (deletes old, creates new)
+# 	  - Appends media (unless explicitly replaced)
+# 	  - Updates exam linking if exam_id provided
+# 	"""
+# 	q = Question.query.filter_by(question_id=question_id).first()
+# 	if not q:
+# 		return jsonify({'message': 'Question not found'}), 404
 	
-	# Parse request (JSON or multipart)
-	data = None
-	if request.is_json:
-		data = request.get_json(silent=True)
-	else:
-		# multipart form-data
-		data = request.form.to_dict()
+# 	# Parse request (JSON or multipart)
+# 	data = None
+# 	if request.is_json:
+# 		data = request.get_json(silent=True)
+# 	else:
+# 		# multipart form-data
+# 		data = request.form.to_dict()
 	
-	if not data:
-		return jsonify({'message': 'No data provided'}), 400
+# 	if not data:
+# 		return jsonify({'message': 'No data provided'}), 400
 	
-	try:
-		# Update basic fields
-		if 'question_text' in data:
-			q.question_text = data['question_text']
-		if 'bloom_level' in data:
-			q.bloom_level = data['bloom_level']
-		if 'difficulty' in data:
-			q.difficulty = data['difficulty']
-		if 'explanation' in data:
-			q.explanation = data['explanation']
-		if 'source' in data:
-			q.source = data['source']
+# 	try:
+# 		# Update basic fields
+# 		if 'question_text' in data:
+# 			q.question_text = data['question_text']
+# 		if 'bloom_level' in data:
+# 			q.bloom_level = data['bloom_level']
+# 		if 'difficulty' in data:
+# 			q.difficulty = data['difficulty']
+# 		if 'explanation' in data:
+# 			q.explanation = data['explanation']
+# 		if 'source' in data:
+# 			q.source = data['source']
 		
-		# Update choices (replace all)
-		if 'choices' in data:
-			# Delete old choices
-			Choice.query.filter_by(question_id=question_id).delete()
+# 		# Update choices (replace all)
+# 		if 'choices' in data:
+# 			# Delete old choices
+# 			Choice.query.filter_by(question_id=question_id).delete()
 			
-			# Parse choices if string (from multipart)
-			choices_list = data.get('choices')
-			if isinstance(choices_list, str):
-				try:
-					choices_list = json.loads(choices_list)
-					if choices_list is None:
-						choices_list = []
-				except (ValueError, TypeError) as ex:
-					current_app.logger.warning(f"Failed to parse choices JSON: {ex}; raw={choices_list}")
-					return jsonify({'message': 'Invalid choices format'}), 400
-			elif not isinstance(choices_list, list):
-				choices_list = []
+# 			# Parse choices if string (from multipart)
+# 			choices_list = data.get('choices')
+# 			if isinstance(choices_list, str):
+# 				try:
+# 					choices_list = json.loads(choices_list)
+# 					if choices_list is None:
+# 						choices_list = []
+# 				except (ValueError, TypeError) as ex:
+# 					current_app.logger.warning(f"Failed to parse choices JSON: {ex}; raw={choices_list}")
+# 					return jsonify({'message': 'Invalid choices format'}), 400
+# 			elif not isinstance(choices_list, list):
+# 				choices_list = []
 			
-			# Add new choices
-			for c in choices_list:
-				db.session.add(Choice(
-					question_id=question_id,
-					label=c.get('label'),
-					text=c.get('text'),
-					is_correct=bool(c.get('is_correct'))
-				))
+# 			# Add new choices
+# 			for c in choices_list:
+# 				db.session.add(Choice(
+# 					question_id=question_id,
+# 					label=c.get('label'),
+# 					text=c.get('text'),
+# 					is_correct=bool(c.get('is_correct'))
+# 				))
 		
-		# Update tags (replace all)
-		if 'tags' in data:
-			# Delete old question-tag mappings
-			QuestionTag.query.filter_by(question_id=question_id).delete()
+# 		# Update tags (replace all)
+# 		if 'tags' in data:
+# 			# Delete old question-tag mappings
+# 			QuestionTag.query.filter_by(question_id=question_id).delete()
 			
-			# Parse tags if string
-			tags_list = data.get('tags')
-			if isinstance(tags_list, str):
-				try:
-					tags_list = json.loads(tags_list)
-					if tags_list is None:
-						tags_list = []
-				except (ValueError, TypeError):
-					# fallback: accept comma-separated string "a, b, c"
-					tags_list = [t.strip() for t in tags_list.split(',') if t.strip()]
-			elif not isinstance(tags_list, list):
-				tags_list = []
+# 			# Parse tags if string
+# 			tags_list = data.get('tags')
+# 			if isinstance(tags_list, str):
+# 				try:
+# 					tags_list = json.loads(tags_list)
+# 					if tags_list is None:
+# 						tags_list = []
+# 				except (ValueError, TypeError):
+# 					# fallback: accept comma-separated string "a, b, c"
+# 					tags_list = [t.strip() for t in tags_list.split(',') if t.strip()]
+# 			elif not isinstance(tags_list, list):
+# 				tags_list = []
 			
-			# Create/attach tags
-			for tname in tags_list:
-				if not tname:
-					continue
-				tag = Tag.query.filter_by(name=tname).first()
-				if not tag:
-					tag = Tag(name=tname)
-					db.session.add(tag)
-					db.session.flush()
-				db.session.add(QuestionTag(question_id=question_id, tag_id=tag.tag_id))
+# 			# Create/attach tags
+# 			for tname in tags_list:
+# 				if not tname:
+# 					continue
+# 				tag = Tag.query.filter_by(name=tname).first()
+# 				if not tag:
+# 					tag = Tag(name=tname)
+# 					db.session.add(tag)
+# 					db.session.flush()
+# 				db.session.add(QuestionTag(question_id=question_id, tag_id=tag.tag_id))
 		
-		# Handle media files (multipart upload to S3)
-		if 'media_files' in request.files:
-			bucket = os.getenv('S3_BUCKET', 'std-dacn-truonggiahuy-bucket-20251010')
-			if not bucket:
-				return jsonify({'message': 'S3_BUCKET not configured'}), 500
+# 		# Handle media files (multipart upload to S3)
+# 		if 'media_files' in request.files:
+# 			bucket = os.getenv('S3_BUCKET', 'std-dacn-truonggiahuy-bucket-20251010')
+# 			if not bucket:
+# 				return jsonify({'message': 'S3_BUCKET not configured'}), 500
 			
-			files = request.files.getlist('media_files')
-			for file in files:
-				if not file or file.filename == '':
-					continue
+# 			files = request.files.getlist('media_files')
+# 			for file in files:
+# 				if not file or file.filename == '':
+# 					continue
 				
-				# Generate S3 key
-				file_ext = os.path.splitext(file.filename)[1]
-				s3_key = f"media/{question_id}/{_gen_id('m_')}{file_ext}"
+# 				# Generate S3 key
+# 				file_ext = os.path.splitext(file.filename)[1]
+# 				s3_key = f"media/{question_id}/{_gen_id('m_')}{file_ext}"
 				
-				# Upload to S3
-				file_url = upload_to_s3(file, bucket, s3_key)
+# 				# Upload to S3
+# 				file_url = upload_to_s3(file, bucket, s3_key)
 				
-				# Create media record
-				mid = _gen_id('m_')
-				file_type = request.form.get('media_file_type', 'image')
-				description = request.form.get('media_description', '')
+# 				# Create media record
+# 				mid = _gen_id('m_')
+# 				file_type = request.form.get('media_file_type', 'image')
+# 				description = request.form.get('media_description', '')
 				
-				db.session.add(Media(
-					media_id=mid,
-					question_id=question_id,
-					file_url=file_url,
-					file_type=file_type,
-					description=description
-				))
+# 				db.session.add(Media(
+# 					media_id=mid,
+# 					question_id=question_id,
+# 					file_url=file_url,
+# 					file_type=file_type,
+# 					description=description
+# 				))
 		
-		# Update exam linking (if provided)
-		if 'exam_id' in data:
-			exam_id = data['exam_id']
-			# Delete old exam-question mapping for this question
-			ExamQuestion.query.filter_by(question_id=question_id).delete()
+# 		# Update exam linking (if provided)
+# 		if 'exam_id' in data:
+# 			exam_id = data['exam_id']
+# 			# Delete old exam-question mapping for this question
+# 			ExamQuestion.query.filter_by(question_id=question_id).delete()
 			
-			# Add new mapping if exam exists
-			if exam_id:
-				exam = Exam.query.filter_by(exam_id=exam_id).first()
-				if exam:
-					order_no = int(data.get('order_no', 0))
-					if order_no == 0:
-						# compute next order_no
-						last = db.session.query(db.func.max(ExamQuestion.order_no)).filter_by(exam_id=exam_id).scalar()
-						order_no = (last or 0) + 1
-					db.session.add(ExamQuestion(exam_id=exam_id, question_id=question_id, order_no=order_no))
+# 			# Add new mapping if exam exists
+# 			if exam_id:
+# 				exam = Exam.query.filter_by(exam_id=exam_id).first()
+# 				if exam:
+# 					order_no = int(data.get('order_no', 0))
+# 					if order_no == 0:
+# 						# compute next order_no
+# 						last = db.session.query(db.func.max(ExamQuestion.order_no)).filter_by(exam_id=exam_id).scalar()
+# 						order_no = (last or 0) + 1
+# 					db.session.add(ExamQuestion(exam_id=exam_id, question_id=question_id, order_no=order_no))
 		
-		db.session.commit()
-		# reload question to ensure we return fresh state
-		q = Question.query.filter_by(question_id=question_id).first()
-		if not q:
-			return jsonify({'message': 'Question updated but failed to load'}), 200
-		return jsonify({'message': 'Question updated', 'question': _serialize_question(q)}), 200
+# 		db.session.commit()
+# 		# reload question to ensure we return fresh state
+# 		q = Question.query.filter_by(question_id=question_id).first()
+# 		if not q:
+# 			return jsonify({'message': 'Question updated but failed to load'}), 200
+# 		return jsonify({'message': 'Question updated', 'question': _serialize_question(q)}), 200
 	
-	except Exception as e:
-		db.session.rollback()
-		current_app.logger.error(f"Error editing question: {str(e)}")
-		return jsonify({'message': 'Failed to update question', 'error': str(e)}), 500
+# 	except Exception as e:
+# 		db.session.rollback()
+# 		current_app.logger.error(f"Error editing question: {str(e)}")
+# 		return jsonify({'message': 'Failed to update question', 'error': str(e)}), 500
 
