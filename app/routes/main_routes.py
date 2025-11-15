@@ -313,3 +313,27 @@ def edit_question(question_id: str):
 		current_app.logger.error(f"Error editing question: {str(e)}")
 		return jsonify({'message': 'Failed to update question', 'error': str(e)}), 500
 
+
+@main.route('/questions/<question_id>', methods=['DELETE'])
+def delete_question(question_id: str):
+	"""Delete a question and its related records (choices, tags, media, exam links)."""
+	q = Question.query.filter_by(question_id=question_id).first()
+	if not q:
+		return jsonify({'message': 'Question not found'}), 404
+
+	try:
+		# Remove related rows first to avoid FK constraint issues
+		QuestionTag.query.filter_by(question_id=question_id).delete()
+		Choice.query.filter_by(question_id=question_id).delete()
+		Media.query.filter_by(question_id=question_id).delete()
+		ExamQuestion.query.filter_by(question_id=question_id).delete()
+
+		db.session.delete(q)
+		db.session.commit()
+		return jsonify({'message': 'Question deleted', 'question_id': question_id}), 200
+
+	except Exception as e:
+		db.session.rollback()
+		current_app.logger.error(f"Error deleting question: {str(e)}")
+		return jsonify({'message': 'Failed to delete question', 'error': str(e)}), 500
+
