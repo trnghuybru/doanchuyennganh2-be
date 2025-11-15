@@ -15,6 +15,7 @@ from app.models import (
     db, User, Question,
     Choice, Tag, QuestionTag, Exam, ExamQuestion, Media
 )
+from app.models import QuestionSet, QuestionSetQuestion
 
 fake = Faker("vi_VN")
 app = create_app()
@@ -166,6 +167,33 @@ def create_media(questions, n=10):
     print(f"✅ Đã tạo {len(medias)} media items.")
     return medias
 
+
+def create_question_sets(questions, n=3):
+    """Tạo một vài bộ câu hỏi và gán ngẫu nhiên các câu vào mỗi bộ."""
+    sets = []
+    s_links = []
+    for _ in range(n):
+        sid = uid('s_')
+        title = fake.sentence(nb_words=3)
+        desc = fake.sentence(nb_words=8)
+        sets.append(QuestionSet(set_id=sid, title=title, description=desc))
+
+    db.session.add_all(sets)
+    db.session.flush()
+
+    # Attach random questions to each set (5-10 questions)
+    for s in sets:
+        count = min(len(questions), random.randint(5, 10))
+        chosen = random.sample(questions, k=count)
+        for order, q in enumerate(chosen, start=1):
+            s_links.append(QuestionSetQuestion(set_id=s.set_id, question_id=q.question_id, order_no=order))
+
+    if s_links:
+        db.session.add_all(s_links)
+    db.session.commit()
+    print(f"✅ Đã tạo {len(sets)} question sets và gán {len(s_links)} liên kết.")
+    return sets
+
 # =====================
 # MAIN ENTRY
 # =====================
@@ -184,6 +212,8 @@ def run_all(reset=False):
         questions = create_questions(tags, n=40)
         exams = create_exams(users, questions, n=6)
         create_media(questions, n=12)
+        # create question sets and attach questions
+        create_question_sets(questions, n=3)
         print(f"\n🎉 Hoàn tất seed data: Users={len(users)}, Questions={len(questions)}, Exams={len(exams)}")
 
 

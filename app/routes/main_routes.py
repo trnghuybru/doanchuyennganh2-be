@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 import uuid
 import json
 
-from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion
+from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion, QuestionSet, QuestionSetQuestion
 
 main = Blueprint('main', __name__)
 
@@ -98,6 +98,25 @@ def create_questions_batch():
 
 	results = []
 
+	# Optional: create or attach to a question set
+	set_id = None
+	if 'create_set' in payload:
+		cs = payload.get('create_set') or {}
+		title = cs.get('title')
+		description = cs.get('description')
+		if not title:
+			return jsonify({'message': 'create_set requires a title'}), 400
+		set_id = _gen_id('s_')
+		qs = QuestionSet(set_id=set_id, title=title, description=description)
+		db.session.add(qs)
+		db.session.flush()
+	elif 'question_set_id' in payload:
+		set_id = payload.get('question_set_id')
+		if set_id:
+			exists = QuestionSet.query.filter_by(set_id=set_id).first()
+			if not exists:
+				return jsonify({'message': 'question_set_id not found'}), 400
+
 	try:
 		# Use a single transaction for the whole batch
 		for item in questions_in:
@@ -173,6 +192,12 @@ def create_questions_batch():
 						order_no = (last or 0) + 1
 					eq = ExamQuestion(exam_id=exam_id, question_id=qid, order_no=order_no)
 					db.session.add(eq)
+
+				# attach to question set if requested
+				if set_id:
+					last_order = db.session.query(db.func.max(QuestionSetQuestion.order_no)).filter_by(set_id=set_id).scalar()
+					order_no = (last_order or 0) + 1
+					db.session.add(QuestionSetQuestion(set_id=set_id, question_id=qid, order_no=order_no))
 
 			results.append({'question_id': qid})
 
@@ -336,4 +361,25 @@ def delete_question(question_id: str):
 		db.session.rollback()
 		current_app.logger.error(f"Error deleting question: {str(e)}")
 		return jsonify({'message': 'Failed to delete question', 'error': str(e)}), 500
+
+
+@main.route('/question-sets', methods=['POST'])
+def create_question_set():
+	"""Create an empty QuestionSet (no questions)."""
+	payload = request.get_json(silent=True) or {}
+	title = payload.get('title')
+	description = payload.get('description')
+	if not title:
+		return jsonify({'message': 'title is required'}), 400
+
+	set_id = _gen_id('s_')
+	qs = QuestionSet(set_id=set_id, title=title, description=description)
+	try:
+		db.session.add(qs)
+		db.session.commit()
+		return jsonify({'set_id': set_id, 'title': title, 'description': description}), 201
+	except Exception as e:
+		db.session.rollback()
+		current_app.logger.error(f"Error creating question set: {str(e)}")
+		return jsonify({'message': 'Failed to create question set', 'error': str(e)}), 500
 
