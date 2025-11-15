@@ -1,38 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app
 import uuid
-import os
-import boto3
 import json
 
 from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion
 
 main = Blueprint('main', __name__)
-
-_s3_client = None
-
-def get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client(
-            's3',
-            region_name=os.getenv('AWS_REGION', 'ap-northeast-1')
-        )
-    return _s3_client
-
-def upload_to_s3(file_obj, bucket: str, key: str) -> str:
-    """Upload file to S3 and return the S3 URL."""
-    try:
-        s3 = get_s3_client()
-        s3.upload_fileobj(
-            file_obj,
-            bucket,
-            key,
-            ExtraArgs={'ContentType': file_obj.content_type}
-        )
-        return f"s3://{bucket}/{key}"
-    except Exception as e:
-        current_app.logger.error(f"S3 upload error: {str(e)}")
-        raise
 
 
 def _gen_id(prefix: str = 'q_') -> str:
@@ -214,19 +186,16 @@ def create_questions_batch():
 
 @main.route('/questions/<question_id>', methods=['PUT'])
 def edit_question(question_id: str):
-	"""Edit an existing question (with choices, tags, media, exam linking).
-	
+	"""Edit an existing question (with choices, tags, exam linking).
+
 	Supports both JSON and multipart form-data:
 	  - JSON: question_text, bloom_level, difficulty, explanation, source,
-	          choices (array of {label, text, is_correct}),
-	          tags (array of tag names)
-	  - multipart: same fields + 'media_files' (multiple files)
-	
-	Media files will be uploaded to S3 if S3 credentials are configured.
-	
+		  choices (array of {label, text, is_correct}),
+		  tags (array of tag names)
+	  - multipart: same fields (file uploads are ignored by this endpoint)
+
 	Behavior:
 	  - Replaces choices/tags if provided (deletes old, creates new)
-	  - Appends media (unless explicitly replaced)
 	  - Updates exam linking if exam_id provided
 	"""
 	q = Question.query.filter_by(question_id=question_id).first()
@@ -313,36 +282,7 @@ def edit_question(question_id: str):
 					db.session.flush()
 				db.session.add(QuestionTag(question_id=question_id, tag_id=tag.tag_id))
 		
-		# Handle media files (multipart upload to S3)
-		if 'media_files' in request.files:
-			bucket = os.getenv('S3_BUCKET', 'std-dacn-truonggiahuy-bucket-20251010')
-			if not bucket:
-				return jsonify({'message': 'S3_BUCKET not configured'}), 500
-			
-			files = request.files.getlist('media_files')
-			for file in files:
-				if not file or file.filename == '':
-					continue
-				
-				# Generate S3 key
-				file_ext = os.path.splitext(file.filename)[1]
-				s3_key = f"media/{question_id}/{_gen_id('m_')}{file_ext}"
-				
-				# Upload to S3
-				file_url = upload_to_s3(file, bucket, s3_key)
-				
-				# Create media record
-				mid = _gen_id('m_')
-				file_type = request.form.get('media_file_type', 'image')
-				description = request.form.get('media_description', '')
-				
-				db.session.add(Media(
-					media_id=mid,
-					question_id=question_id,
-					file_url=file_url,
-					file_type=file_type,
-					description=description
-				))
+		# Note: this endpoint intentionally does not modify media or upload to S3.
 		
 		# Update exam linking (if provided)
 		if 'exam_id' in data:
