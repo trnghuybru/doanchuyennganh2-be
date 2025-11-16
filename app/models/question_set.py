@@ -7,6 +7,7 @@ class QuestionSet(db.Model):
     set_id = db.Column(db.String(50), primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
+    created_by = db.Column(db.String(50), db.ForeignKey('users.user_id', ondelete='SET NULL'), index=True)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
     updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
 

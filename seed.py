@@ -168,15 +168,20 @@ def create_media(questions, n=10):
     return medias
 
 
-def create_question_sets(questions, n=3):
-    """Tạo một vài bộ câu hỏi và gán ngẫu nhiên các câu vào mỗi bộ."""
+def create_question_sets(users, questions, n=3):
+    """Tạo một vài bộ câu hỏi và gán ngẫu nhiên các câu vào mỗi bộ.
+
+    Each set will be assigned a random user from `users` as its owner (created_by).
+    """
     sets = []
     s_links = []
     for _ in range(n):
         sid = uid('s_')
         title = fake.sentence(nb_words=3)
         desc = fake.sentence(nb_words=8)
-        sets.append(QuestionSet(set_id=sid, title=title, description=desc))
+        owner = random.choice(users) if users else None
+        created_by = owner.user_id if owner else None
+        sets.append(QuestionSet(set_id=sid, title=title, description=desc, created_by=created_by))
 
     db.session.add_all(sets)
     db.session.flush()
@@ -212,8 +217,8 @@ def run_all(reset=False):
         questions = create_questions(tags, n=40)
         exams = create_exams(users, questions, n=6)
         create_media(questions, n=12)
-        # create question sets and attach questions
-        create_question_sets(questions, n=3)
+        # create question sets and attach questions (sets belong to users)
+        create_question_sets(users, questions, n=3)
         print(f"\n🎉 Hoàn tất seed data: Users={len(users)}, Questions={len(questions)}, Exams={len(exams)}")
 
 

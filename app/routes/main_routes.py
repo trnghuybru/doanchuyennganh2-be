@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 import uuid
 import json
 
-from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion, QuestionSet, QuestionSetQuestion
+from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion, QuestionSet, QuestionSetQuestion, User
 
 main = Blueprint('main', __name__)
 
@@ -369,11 +369,18 @@ def create_question_set():
 	payload = request.get_json(silent=True) or {}
 	title = payload.get('title')
 	description = payload.get('description')
+	created_by = payload.get('created_by')
 	if not title:
 		return jsonify({'message': 'title is required'}), 400
 
+	# validate created_by if provided
+	if created_by:
+		user = User.query.filter_by(user_id=created_by).first()
+		if not user:
+			return jsonify({'message': 'created_by user not found'}), 400
+
 	set_id = _gen_id('s_')
-	qs = QuestionSet(set_id=set_id, title=title, description=description)
+	qs = QuestionSet(set_id=set_id, title=title, description=description, created_by=created_by)
 	try:
 		db.session.add(qs)
 		db.session.commit()
@@ -382,4 +389,51 @@ def create_question_set():
 		db.session.rollback()
 		current_app.logger.error(f"Error creating question set: {str(e)}")
 		return jsonify({'message': 'Failed to create question set', 'error': str(e)}), 500
+
+
+@main.route('/question-sets/<set_id>', methods=['GET'])
+def get_question_set(set_id: str):
+	"""Return a question set and its questions (ordered by order_no)."""
+	qs = QuestionSet.query.filter_by(set_id=set_id).first()
+	if not qs:
+		return jsonify({'message': 'Question set not found'}), 404
+
+	links = QuestionSetQuestion.query.filter_by(set_id=set_id).order_by(QuestionSetQuestion.order_no).all()
+	questions = []
+	for l in links:
+		q = Question.query.filter_by(question_id=l.question_id).first()
+		if not q:
+			continue
+		questions.append(_serialize_question(q))
+
+	return jsonify({
+		'set_id': qs.set_id,
+		'title': qs.title,
+		'description': qs.description,
+		'created_at': qs.created_at.isoformat() if getattr(qs, 'created_at', None) else None,
+		'updated_at': qs.updated_at.isoformat() if getattr(qs, 'updated_at', None) else None,
+		'questions': questions
+	}), 200
+
+
+@main.route('/users/<user_id>/question-sets', methods=['GET'])
+def list_user_question_sets(user_id: str):
+	"""Return all question sets owned by a given user."""
+	user = User.query.filter_by(user_id=user_id).first()
+	if not user:
+		return jsonify({'message': 'User not found'}), 404
+
+	sets = QuestionSet.query.filter_by(created_by=user_id).order_by(QuestionSet.created_at.desc()).all()
+	out = []
+	for s in sets:
+		count = QuestionSetQuestion.query.filter_by(set_id=s.set_id).count()
+		out.append({
+			'set_id': s.set_id,
+			'title': s.title,
+			'description': s.description,
+			'created_at': s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
+			'question_count': count
+		})
+
+	return jsonify({'user_id': user_id, 'sets': out}), 200
 
