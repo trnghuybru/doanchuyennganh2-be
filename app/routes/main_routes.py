@@ -200,9 +200,14 @@ def create_questions_batch():
 					db.session.add(QuestionSetQuestion(set_id=set_id, question_id=qid, order_no=order_no))
 
 			results.append({'question_id': qid})
+			
 
 		db.session.commit()
-		return jsonify({'created': results}), 201
+		response_data = {'created': results}
+		if set_id:
+			response_data['set_id'] = set_id
+
+		return jsonify(response_data), 201
 
 	except Exception as e:
 		db.session.rollback()
@@ -361,5 +366,3 @@ def delete_question(question_id: str):
 		db.session.rollback()
 		current_app.logger.error(f"Error deleting question: {str(e)}")
 		return jsonify({'message': 'Failed to delete question', 'error': str(e)}), 500
-
-
