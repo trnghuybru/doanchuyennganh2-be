@@ -109,7 +109,7 @@ def get_question_set(user_id: str, set_id: str):
 	if qs.created_by:
 		user = User.query.filter_by(user_id=qs.created_by).first()
 		if user:
-			creator = {'user_id': user.user_id, 'username': user.username}
+			creator = {'user_id': user.user_id, 'username': user.name}
 
 	links = QuestionSetQuestion.query.filter_by(set_id=set_id).order_by(QuestionSetQuestion.order_no).all()
 	questions = []
@@ -149,7 +149,7 @@ def list_user_question_sets(user_id: str):
 			'question_count': count,
 			'creator': {
 				'user_id': user.user_id,
-				'username': user.username
+				'username': user.name
 			}
 		})
 
