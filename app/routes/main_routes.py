@@ -97,7 +97,7 @@ def create_questions_batch():
 		return jsonify({'message': 'questions must be a list'}), 400
 
 	results = []
-	
+
 	set_id = None
 	user_id = payload.get('user_id')
 	if user_id:
@@ -111,6 +111,8 @@ def create_questions_batch():
 		description = cs.get('description')
 		if not title:
 			return jsonify({'message': 'create_set requires a title'}), 400
+		if not user_id:
+			return jsonify({'message': 'user_id is required when creating a new set'}), 400
 		set_id = _gen_id('s_')
 		qs = QuestionSet(set_id=set_id, title=title, description=description, created_by=user_id)
 		db.session.add(qs)
@@ -118,6 +120,8 @@ def create_questions_batch():
 	elif 'question_set_id' in payload:
 		set_id = payload.get('question_set_id')
 		if set_id:
+			if not user_id:
+				return jsonify({'message': 'user_id is required to add questions to an existing set'}), 400
 			exists = QuestionSet.query.filter_by(set_id=set_id).first()
 			if not exists:
 				return jsonify({'message': 'question_set_id not found'}), 400
@@ -198,11 +202,11 @@ def create_questions_batch():
 					eq = ExamQuestion(exam_id=exam_id, question_id=qid, order_no=order_no)
 					db.session.add(eq)
 
-				# attach to question set if requested
-				if set_id:
-					last_order = db.session.query(db.func.max(QuestionSetQuestion.order_no)).filter_by(set_id=set_id).scalar()
-					order_no = (last_order or 0) + 1
-					db.session.add(QuestionSetQuestion(set_id=set_id, question_id=qid, order_no=order_no))
+			# attach to question set if requested
+			if set_id:
+				last_order = db.session.query(db.func.max(QuestionSetQuestion.order_no)).filter_by(set_id=set_id).scalar()
+				order_no = (last_order or 0) + 1
+				db.session.add(QuestionSetQuestion(set_id=set_id, question_id=qid, order_no=order_no))
 
 			results.append({'question_id': qid})
 			
@@ -217,7 +221,6 @@ def create_questions_batch():
 	except Exception as e:
 		db.session.rollback()
 		return jsonify({'message': 'Failed to create questions', 'error': str(e)}), 500
-
 
 @main.route('/questions/<question_id>', methods=['PUT'])
 def edit_question(question_id: str):
