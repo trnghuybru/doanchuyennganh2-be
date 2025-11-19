@@ -105,8 +105,6 @@ def get_question_set(set_id: str):
 	qs = QuestionSet.query.filter_by(set_id=set_id).first()
 	if not qs:
 		return jsonify({'message': 'Question set not found'}), 404
-
-	# get creator info
 	creator = None
 	if qs.created_by:
 		user = User.query.filter_by(user_id=qs.created_by).first()
