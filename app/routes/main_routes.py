@@ -97,8 +97,7 @@ def create_questions_batch():
 		return jsonify({'message': 'questions must be a list'}), 400
 
 	results = []
-
-	# Optional: create or attach to a question set
+	
 	set_id = None
 	user_id = payload.get('user_id')
 	if user_id:

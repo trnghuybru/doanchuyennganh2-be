@@ -99,12 +99,12 @@ def create_question_set():
 		return jsonify({'message': 'Failed to create question set', 'error': str(e)}), 500
 
 
-@set_routes.route('/question-sets/<set_id>', methods=['GET'])
-def get_question_set(set_id: str):
+@set_routes.route('/users/<user_id>/question-sets/<set_id>', methods=['GET'])
+def get_question_set(user_id: str, set_id: str):
 	"""Return a question set and its questions (ordered by order_no)."""
-	qs = QuestionSet.query.filter_by(set_id=set_id).first()
+	qs = QuestionSet.query.filter_by(set_id=set_id, created_by=user_id).first()
 	if not qs:
-		return jsonify({'message': 'Question set not found'}), 404
+		return jsonify({'message': 'Question set not found or you do not have permission to view it'}), 404
 	creator = None
 	if qs.created_by:
 		user = User.query.filter_by(user_id=qs.created_by).first()
