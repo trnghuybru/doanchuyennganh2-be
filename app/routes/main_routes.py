@@ -100,6 +100,12 @@ def create_questions_batch():
 
 	# Optional: create or attach to a question set
 	set_id = None
+	user_id = payload.get('user_id')
+	if user_id:
+		user = User.query.filter_by(user_id=user_id).first()
+		if not user:
+			return jsonify({'message': 'user_id not found'}), 400
+
 	if 'create_set' in payload:
 		cs = payload.get('create_set') or {}
 		title = cs.get('title')
@@ -107,7 +113,7 @@ def create_questions_batch():
 		if not title:
 			return jsonify({'message': 'create_set requires a title'}), 400
 		set_id = _gen_id('s_')
-		qs = QuestionSet(set_id=set_id, title=title, description=description)
+		qs = QuestionSet(set_id=set_id, title=title, description=description, created_by=user_id)
 		db.session.add(qs)
 		db.session.flush()
 	elif 'question_set_id' in payload:

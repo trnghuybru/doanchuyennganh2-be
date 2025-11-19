@@ -106,6 +106,13 @@ def get_question_set(set_id: str):
 	if not qs:
 		return jsonify({'message': 'Question set not found'}), 404
 
+	# get creator info
+	creator = None
+	if qs.created_by:
+		user = User.query.filter_by(user_id=qs.created_by).first()
+		if user:
+			creator = {'user_id': user.user_id, 'username': user.username}
+
 	links = QuestionSetQuestion.query.filter_by(set_id=set_id).order_by(QuestionSetQuestion.order_no).all()
 	questions = []
 	for l in links:
@@ -118,6 +125,7 @@ def get_question_set(set_id: str):
 		'set_id': qs.set_id,
 		'title': qs.title,
 		'description': qs.description,
+		'creator': creator,
 		'created_at': qs.created_at.isoformat() if getattr(qs, 'created_at', None) else None,
 		'updated_at': qs.updated_at.isoformat() if getattr(qs, 'updated_at', None) else None,
 		'questions': questions
@@ -140,7 +148,11 @@ def list_user_question_sets(user_id: str):
 			'title': s.title,
 			'description': s.description,
 			'created_at': s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
-			'question_count': count
+			'question_count': count,
+			'creator': {
+				'user_id': user.user_id,
+				'username': user.username
+			}
 		})
 
 	return jsonify({'user_id': user_id, 'sets': out}), 200
