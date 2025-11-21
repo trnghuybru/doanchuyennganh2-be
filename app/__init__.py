@@ -25,10 +25,10 @@ def create_app():
     from app.routes.image_routes import image_bp
     from app.routes.set_routes import set_routes
 
-    app.register_blueprint(main)
-    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(main, url_prefix='/api')
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(api_bp, url_prefix='/api')
-    app.register_blueprint(image_bp, url_prefix='/image')
-    app.register_blueprint(set_routes)
+    app.register_blueprint(image_bp, url_prefix='/api/image')
+    app.register_blueprint(set_routes, url_prefix='/api')
 
     return app
