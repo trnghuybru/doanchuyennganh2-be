@@ -129,7 +129,6 @@ def get_question_set(user_id: str, set_id: str):
 		'questions': questions
 	}), 200
 
-
 @set_routes.route('/users/<user_id>/question-sets', methods=['GET'])
 def list_user_question_sets(user_id: str):
 	"""Return all question sets owned by a given user."""
