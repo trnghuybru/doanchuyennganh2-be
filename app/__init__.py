@@ -24,11 +24,13 @@ def create_app():
     from app.routes.user_routes import api_bp
     from app.routes.image_routes import image_bp
     from app.routes.set_routes import set_routes
+    from app.routes.exam_routes import exam_routes
 
     app.register_blueprint(main, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(image_bp, url_prefix='/api/image')
     app.register_blueprint(set_routes, url_prefix='/api')
+    app.register_blueprint(exam_routes, url_prefix='/api')
 
     return app
