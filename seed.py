@@ -8,12 +8,14 @@ Cách chạy:
 import sys
 import random
 import uuid
+from datetime import datetime, timedelta
 from faker import Faker
 from werkzeug.security import generate_password_hash
 from app import create_app
 from app.models import (
     db, User, Question,
-    Choice, Tag, QuestionTag, Exam, ExamQuestion, Media
+    Choice, Tag, QuestionTag, Exam, ExamQuestion, Media,
+    ExamResult, ExamAnswer
 )
 from app.models import QuestionSet, QuestionSetQuestion
 
@@ -199,6 +201,142 @@ def create_question_sets(users, questions, n=3):
     print(f"✅ Đã tạo {len(sets)} question sets và gán {len(s_links)} liên kết.")
     return sets
 
+
+def create_exam_results(users, exams, n=15):
+    """Tạo kết quả bài thi cho người dùng.
+    
+    Tạo một số kết quả với các trạng thái khác nhau:
+    - completed: đã hoàn thành với điểm số
+    - in_progress: đang làm dở
+    - abandoned: đã bỏ dở
+    """
+    results = []
+    
+    for _ in range(n):
+        user = random.choice(users) if users else None
+        exam = random.choice(exams) if exams else None
+        
+        if not user or not exam:
+            continue
+            
+        # Lấy số câu hỏi trong đề thi
+        exam_questions = ExamQuestion.query.filter_by(exam_id=exam.exam_id).all()
+        total_questions = len(exam_questions)
+        
+        if total_questions == 0:
+            continue
+        
+        # Chọn trạng thái ngẫu nhiên
+        status = random.choice(['completed', 'in_progress', 'abandoned'])
+        
+        # Tạo thời gian bắt đầu (trong vòng 30 ngày gần đây)
+        started_at = fake.date_time_between(start_date='-30d', end_date='now')
+        
+        # Tính số câu đã trả lời và số câu đúng
+        if status == 'completed':
+            # Đã hoàn thành: trả lời tất cả câu hỏi
+            answered_count = total_questions
+            # Số câu đúng: 60-100% (để có điểm số thực tế)
+            correct_answers = random.randint(
+                int(total_questions * 0.6), 
+                total_questions
+            )
+            completed_at = started_at + timedelta(minutes=random.randint(30, 120))
+        elif status == 'in_progress':
+            # Đang làm: trả lời 30-70% câu hỏi
+            answered_count = random.randint(
+                int(total_questions * 0.3), 
+                int(total_questions * 0.7)
+            )
+            # Số câu đúng trong số đã trả lời
+            correct_answers = random.randint(
+                int(answered_count * 0.5), 
+                answered_count
+            )
+            completed_at = None
+        else:  # abandoned
+            # Bỏ dở: trả lời ít hơn 30% câu hỏi
+            answered_count = random.randint(1, int(total_questions * 0.3))
+            correct_answers = random.randint(0, answered_count)
+            completed_at = None
+        
+        # Tính điểm (0-100)
+        score = round((correct_answers / total_questions) * 100, 2) if total_questions > 0 else 0.0
+        
+        result = ExamResult(
+            result_id=uid("r_"),
+            user_id=user.user_id,
+            exam_id=exam.exam_id,
+            total_questions=total_questions,
+            correct_answers=correct_answers,
+            score=score,
+            status=status,
+            started_at=started_at,
+            completed_at=completed_at
+        )
+        results.append((result, exam_questions, answered_count))
+    
+    # Commit results trước
+    db.session.add_all([r[0] for r in results])
+    db.session.commit()
+    print(f"✅ Đã tạo {len(results)} exam results.")
+    return results
+
+
+def create_exam_answers(exam_results_data):
+    """Tạo câu trả lời cho các kết quả bài thi.
+    
+    exam_results_data: list of tuples (result, exam_questions, answered_count)
+    """
+    all_answers = []
+    
+    for result, exam_questions, answered_count in exam_results_data:
+        # Chỉ tạo câu trả lời cho các câu đã được trả lời
+        questions_to_answer = exam_questions[:answered_count]
+        
+        for eq in questions_to_answer:
+            question = Question.query.get(eq.question_id)
+            if not question:
+                continue
+            
+            # Lấy tất cả choices của câu hỏi
+            choices = Choice.query.filter_by(question_id=question.question_id).all()
+            if not choices:
+                continue
+            
+            # Chọn một choice ngẫu nhiên (có thể đúng hoặc sai)
+            # Tỷ lệ chọn đúng: 60-80% để có điểm số hợp lý
+            if random.random() < random.uniform(0.6, 0.8):
+                # Chọn đáp án đúng
+                selected_choice = next((c for c in choices if c.is_correct), choices[0])
+                is_correct = True
+            else:
+                # Chọn đáp án sai
+                wrong_choices = [c for c in choices if not c.is_correct]
+                selected_choice = random.choice(wrong_choices) if wrong_choices else choices[0]
+                is_correct = False
+            
+            # Tạo thời gian trả lời (sau khi bắt đầu làm bài)
+            answered_at = result.started_at + timedelta(
+                minutes=random.randint(1, 60)
+            )
+            
+            answer = ExamAnswer(
+                answer_id=uid("a_"),
+                result_id=result.result_id,
+                question_id=question.question_id,
+                selected_choice_id=selected_choice.choice_id,
+                selected_choice_label=selected_choice.label,
+                is_correct=is_correct,
+                answered_at=answered_at
+            )
+            all_answers.append(answer)
+    
+    db.session.add_all(all_answers)
+    db.session.commit()
+    print(f"✅ Đã tạo {len(all_answers)} exam answers.")
+    return all_answers
+
 # =====================
 # MAIN ENTRY
 # =====================
@@ -219,7 +357,17 @@ def run_all(reset=False):
         create_media(questions, n=12)
         # create question sets and attach questions (sets belong to users)
         create_question_sets(users, questions, n=3)
-        print(f"\n🎉 Hoàn tất seed data: Users={len(users)}, Questions={len(questions)}, Exams={len(exams)}")
+        
+        # Tạo kết quả bài thi và câu trả lời
+        exam_results_data = create_exam_results(users, exams, n=15)
+        exam_answers = create_exam_answers(exam_results_data)
+        
+        print(f"\n🎉 Hoàn tất seed data:")
+        print(f"   - Users: {len(users)}")
+        print(f"   - Questions: {len(questions)}")
+        print(f"   - Exams: {len(exams)}")
+        print(f"   - Exam Results: {len(exam_results_data)}")
+        print(f"   - Exam Answers: {len(exam_answers)}")
 
 
 if __name__ == "__main__":
