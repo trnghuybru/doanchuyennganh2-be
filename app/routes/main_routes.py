@@ -3,6 +3,7 @@ import uuid
 import json
 
 from app.models import db, Question, Choice, Tag, QuestionTag, Media, Exam, ExamQuestion, QuestionSet, QuestionSetQuestion, User
+from app.services.semantic_search import get_question_vector_store
 
 main = Blueprint('main', __name__)
 
@@ -128,6 +129,7 @@ def create_questions_batch():
 
 	try:
 		# Use a single transaction for the whole batch
+		new_vectors_payload = []  # list of (question_id, question_text)
 		for item in questions_in:
 			# basic validation
 			text = item.get('question_text')
@@ -146,6 +148,9 @@ def create_questions_batch():
 			)
 			db.session.add(q)
 			db.session.flush()  # Ensure question is inserted before adding related records
+
+			# Gom lại để thêm vào vector store sau khi commit
+			new_vectors_payload.append((qid, text))
 
 			# choices
 			choices = item.get('choices') or []
@@ -209,9 +214,19 @@ def create_questions_batch():
 				db.session.add(QuestionSetQuestion(set_id=set_id, question_id=qid, order_no=order_no))
 
 			results.append({'question_id': qid})
-			
+		
 
 		db.session.commit()
+
+		# Sau khi commit DB thành công, cập nhật vector store
+		try:
+			if new_vectors_payload:
+				store = get_question_vector_store()
+				store.add_questions(new_vectors_payload)
+		except Exception as ve:
+			# Không rollback DB nếu lỗi vector store, chỉ log cảnh báo
+			current_app.logger.warning(f"Failed to update vector store for new questions: {ve}")
+
 		response_data = {'created': results}
 		if set_id:
 			response_data['set_id'] = set_id
@@ -340,6 +355,15 @@ def edit_question(question_id: str):
 					db.session.add(ExamQuestion(exam_id=exam_id, question_id=question_id, order_no=order_no))
 		
 		db.session.commit()
+
+		# Rebuild lại vector store từ toàn bộ câu hỏi
+		try:
+			all_questions = Question.query.with_entities(Question.question_id, Question.question_text).all()
+			payload = [(qid, qtext) for (qid, qtext) in all_questions if qtext]
+			store = get_question_vector_store()
+			store.rebuild_from_questions(payload)
+		except Exception as ve:
+			current_app.logger.warning(f"Failed to rebuild vector store after editing question: {ve}")
 		# reload question to ensure we return fresh state
 		q = Question.query.filter_by(question_id=question_id).first()
 		if not q:
@@ -368,9 +392,73 @@ def delete_question(question_id: str):
 
 		db.session.delete(q)
 		db.session.commit()
+
+		# Rebuild lại vector store sau khi xoá câu hỏi
+		try:
+			all_questions = Question.query.with_entities(Question.question_id, Question.question_text).all()
+			payload = [(qid, qtext) for (qid, qtext) in all_questions if qtext]
+			store = get_question_vector_store()
+			store.rebuild_from_questions(payload)
+		except Exception as ve:
+			current_app.logger.warning(f"Failed to rebuild vector store after deleting question: {ve}")
 		return jsonify({'message': 'Question deleted', 'question_id': question_id}), 200
 
 	except Exception as e:
 		db.session.rollback()
 		current_app.logger.error(f"Error deleting question: {str(e)}")
 		return jsonify({'message': 'Failed to delete question', 'error': str(e)}), 500
+
+
+@main.route('/questions/semantic-search', methods=['GET', 'POST'])
+def semantic_search_questions():
+	"""
+	Tìm kiếm ngữ nghĩa trong tập câu hỏi.
+
+	- GET: dùng query param ?q=...&top_k=5
+	- POST JSON: {"query": "...", "top_k": 5}
+	"""
+	try:
+		if request.method == 'GET':
+			query = request.args.get('q') or request.args.get('query')
+			top_k = int(request.args.get('top_k', 5))
+		else:
+			data = request.get_json(silent=True) or {}
+			query = data.get('query')
+			top_k = int(data.get('top_k', 5))
+
+		if not query:
+			return jsonify({'message': 'query is required'}), 400
+
+		# Nếu vector store chưa có dữ liệu (lần đầu) thì build từ DB
+		store = get_question_vector_store()
+		if not store.question_ids:
+			all_questions = Question.query.with_entities(Question.question_id, Question.question_text).all()
+			payload = [(qid, qtext) for (qid, qtext) in all_questions if qtext]
+			store.rebuild_from_questions(payload)
+
+		results = store.search(query, top_k=top_k)
+		if not results:
+			return jsonify({'query': query, 'results': []}), 200
+
+		# Lấy dữ liệu Question đầy đủ
+		id_list = [qid for (qid, _score) in results]
+		questions = Question.query.filter(Question.question_id.in_(id_list)).all()
+
+		# Map question_id -> Question object
+		q_map = {q.question_id: q for q in questions}
+
+		# Serialize theo đúng thứ tự kết quả
+		out = []
+		for qid, score in results:
+			q = q_map.get(qid)
+			if not q:
+				continue
+			serialized = _serialize_question(q)
+			serialized['score'] = score
+			out.append(serialized)
+
+		return jsonify({'query': query, 'results': out}), 200
+
+	except Exception as e:
+		current_app.logger.error(f"Error in semantic_search_questions: {str(e)}")
+		return jsonify({'message': 'Failed to perform semantic search', 'error': str(e)}), 500
